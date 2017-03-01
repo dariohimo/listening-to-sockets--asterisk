@@ -1,0 +1,21 @@
+{
+  "name": "pruebas",
+  "version": "1.0.0",
+  "description": "pruebas ari",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "ari"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "asterisk.io": "^0.1.1",
+    "express": "^4.14.1",
+    "flat": "^2.0.1",
+    "socket.io": "^1.7.2",
+    "socket.io-redis": "^4.0.0"
+  }
+}
