@@ -7,17 +7,6 @@ var JSONStore = function (redis) {
   return this
 }
 
-JSONStore.prototype.resave = function (key, jsonObj, done) {
-  var self = this
-  this.redis.del(key, function (err, result) {
-    if (err) {
-      done(err)
-    } else {
-      self.set(key, jsonObj, done)
-    }
-  })
-}
-
 JSONStore.prototype.set = function (key, jsonObj, done) {
   var obj = flatten(jsonObj)
   var keyValArr = []
@@ -34,7 +23,7 @@ JSONStore.prototype.set = function (key, jsonObj, done) {
 }
 
 JSONStore.prototype.get = function (key, done) {
-  this.redis.hgetall(key, function (err, result) {
+  this.redis.hgetall(key, (err, result) => {
     if (result) {
       done(null, unflatten(result))
     } else if (!err) {

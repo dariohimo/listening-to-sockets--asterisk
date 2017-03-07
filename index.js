@@ -4,17 +4,12 @@ const socketio = require('socket.io')
 const asteriskio = require('asterisk.io')
 const socketredis = require('socket.io-redis')
 
-var agent = require('./agents')
+const Agent = require('./lib/agents')
+const agents = new Agent({
+  endpoint: 'http://192.167.99.246:1337',
+  nameapi: '/agent_online'
+})
 
-/**
- * [description: Se realiza la conexion con el servicio de redis, el cual almacenara los datos para el dashboard de las calls inbound y outbound]
- *
- * @param redis_port      [El puerto de conexion con redis]
- * @param redis_host      [La ip en donde se encuentra el servicio de redis]
- * @param redis_password  [El puerto de conexion con redis]
- * @param rediscli        [Crear la instancia con redis con las parametros ya descritos]
- *
- */
 const redisHost = process.env.REDIS_HOST || '127.0.0.1'
 const redisPort = process.env.REDIS_PORT || '6388'
 const redisPassword = process.env.REDIS_PASSWORD || 'cosapida3slomasfacil'
@@ -34,96 +29,134 @@ server.listen(port, () => {
   console.log('Server listening at port %d', port)
 })
 
-/**
- * [description: La ruta estatica (/) la cual devolvera un status code 200 (OK)]
- *
- * @param  req        Peticion Request de HTPP
- * @param  res        Peticion Response de HTTP
- * @return            Retorna el status code 200 (OK)
- *
- */
-app.get('/', (req, res) => {
-  res.status(200).json('Hola Mundo')
-})
-
-/**
- * [io description]
- * @type {[type]}
- */
 const io = socketio.listen(server)
 io.adapter(socketredis({ host: redisHost, port: redisPort, password: redisPassword }))
-io.sockets.on('connection', (socket) => {
-  var ami = null
-  ami = asteriskio.ami('192.167.99.224', '5038', 'admin', 'admin')
-  ami.on('error', (err) => {
-    console.log('Error al conectar a ami del asterisk  :' + err)
-  })
-
-  /**
-   * [Captura el evento connect dashboard, sirve para listar la lista de agentes conectados
-   * y el status de su llamada entrante o saliente]
-   *
-   * @return {ListAgents} [Retorna el HAS de la lista de agentes]
-   */
+var iosocket = io.sockets.on('connection', (socket) => {
   socket.on('connect_dashboard', (data) => {
-    agent.get('agents', (err, data) => {
+    agents.shows((err, data) => {
       if (err) {
         console.log('Error al obtener agentes de redis  :' + err)
       }
 
-      // Emite la lista de agentes conectados al asterisk
-      socket.emit('connect_dashboard', {
-        ListAgents: data
-      })
-    })
-  })
-
-  /**
-   *
-   * [Capturar eventos Queue Member Added que se produce en el servicio de asterisk]
-   *
-   */
-  ami.on('eventQueueMemberAdded', (data) => {
-    let agents = getAgentStructure(data, 'eventQueueMemberAdded')
-    agent.set('agents', agents, (err, data) => {
-      if (err) {
-        console.log('Error al guardar agentes de redis  :' + err)
+      for (let key in data) {
+        socket.emit('QueueMemberAdded', {
+          QueueMemberAdded: data[key]
+        })
       }
-
-      socket.emit('QueueMemberAdded', {
-        QueueMemberAdded: agents
-      })
-    })
-  })
-
-  /**
-   *
-   * [Capturar eventos Queue Member Removed que se produce en el servicio de asterisk]
-   *
-   */
-  ami.on('eventQueueMemberRemoved', (data) => {
-    let agents = getAgentStructure(data, 'eventQueueMemberRemoved')
-    let annexed = getAgentAnnexed(data, 'eventQueueMemberRemoved')
-
-    agent.del('agents', agents, (err, data) => {
-      if (err) {
-        console.log('Error al borrar agentes de redis  :' + err)
-      }
-
-      socket.emit('QueueMemberRemoved', {
-        QueueMemberRemoved: annexed
-      })
     })
   })
 })
 
-function getAgentStructure (data, event) {
+const ami = asteriskio.ami('192.167.99.224', '5038', 'admin', 'admin')
+ami.on('error', err => { throw err })
+
+/**
+*
+* [Capturar eventos Queue Member Added que se produce en el servicio de asterisk]
+*
+*/
+ami.on('eventQueueMemberAdded', (data) => {
+  agents.add(data, (err, data) => {
+    if (err) {
+      console.log('Error adding agent on the dashboard :' + err)
+    }
+
+    iosocket.emit('QueueMemberAdded', {
+      QueueMemberAdded: data
+    })
+  })
+})
+
+/**
+*
+* [Capturar eventos Queue Member Removed que se produce en el servicio de asterisk]
+*
+*/
+ami.on('eventQueueMemberRemoved', (data) => {
+  agents.del(data, (err, data) => {
+    if (err) {
+      console.log('Error removing agent on the dashboard :' + err)
+    }
+
+    iosocket.emit('QueueMemberRemoved', {
+      NumberAnnexed: data
+    })
+  })
+})
+
+ami.on('eventQueueMemberPause', (data) => {
+  agents.pause(data, (err, data) => {
+    if (err) {
+      console.log('Error pausing agent on the dashboard :' + err)
+    }
+
+    iosocket.emit('QueueMemberPause', {
+      NumberAnnexed: data['number_annexed'],
+      QueueMemberPause: data
+    })
+  })
+})
+
+ami.on('eventNewConnectedLine', (data) => {
+  agents.set('agents', agents, (err, data) => {
+    if (err) {
+      console.log('Error pausing agent on the :' + err)
+    }
+
+    /*
+    socket.emit('NewConnectedLine', {
+      NewConnectedLine: datos['MemberName']
+    })
+    */
+  })
+})
+
+ami.on('eventHangup', (data) => {
+  // let datos = ('eventHangup', data)
+  /*
+  socket.emit('Hangup', {
+    Hangup: datos['MemberName']
+  })
+  Es el primer array
+  CallerIDNum: '227'
+  */
+})
+
+/*
+function getAgentStructureRinging (data, event) {
   let datos = (event, data)
 
   let agents = {}
-  let annexed = datos['Interface']
-  agents[annexed] = {
-    'number_annexed': datos['Interface'],
+  let annexed = 'SIP/' + datos['CallerIDNum']
+
+  if (datos['ChannelStateDesc'] === 'Ringing') {
+    let phoneNumberInbound = datos['ConnectedLineNum']
+    if (datos['ConnectedLineName'] === 'unknown') {
+      phoneNumberInbound = datos['ConnectedLineNum'] + ' | ' + datos['ConnectedLineName']
+    }
+
+    agents[annexed] = {
+      'name_queue_inbound': datos['Exten'],
+      'phone_number_inbound': phoneNumberInbound
+    }
+  }
+
+  return agents
+}
+
+// Segundo Array - Esto sirve para mostrar los anexos
+     // que estan timbrando
+     // { Event: 'NewConnectedLine',
+     //  ChannelStateDesc: 'Ringing',
+     //  CallerIDNum: '227',
+     //  ConnectedLineNum: '963925318',
+     //  ConnectedLineName: '<unknown>',
+     //  Context: 'nivel-agentes',
+     //  Exten: 'HD_CE_Internet',
+     // }
+     //
+/*
+'number_annexed': datos['Interface'],
     'name_agent': datos['MemberName'],
     'name_event': 'Conectado',
     'name_queue_inbound': '',
@@ -134,17 +167,7 @@ function getAgentStructure (data, event) {
     'status_pause': datos['Paused'],
     'penalty_agent': datos['Penalty'],
     'ringinuse_agent': datos['Ringinuse']
-  }
-
-  return agents
-}
-
-function getAgentAnnexed (data, event) {
-  let datos = (event, data)
-  let annexed = datos['Interface']
-
-  return annexed
-}
+*/
 
 //    var list_agents = {}
 //    var number_annexed = datos['Interface']
@@ -184,14 +207,6 @@ function getAgentAnnexed (data, event) {
   // })
 
 //
-//  ami.on('eventQueueMemberPause', (data) => {
-//    datos = ('eventQueueMemberPause', data)
-//    mostrar_log('Queue Pausa', datos['MemberName'])
-//
-//    socket.emit('QueueMemberPause', {
-//      QueueMemberPause: datos['MemberName']
-//    })
-//  })
 //
 //  ami.on('eventQueueCallerAbandon', (data) => {
 //    datos = ('eventQueueCallerAbandon', data)

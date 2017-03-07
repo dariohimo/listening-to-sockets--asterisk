@@ -56,3 +56,6 @@ typings/
 
 # dotenv environment variables file
 .env
+
+# archivos de pruebas de api sails
+api/
