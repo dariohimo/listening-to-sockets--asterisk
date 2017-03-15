@@ -6,7 +6,7 @@ const socketredis = require('socket.io-redis')
 
 const Agent = require('./lib/agents')
 const agents = new Agent({
-  endpoint: 'http://192.167.99.246:1337',
+  endpoint: 'http://192.167.99.246:1338',
   nameapi: '/agent_online'
 })
 
@@ -98,17 +98,20 @@ ami.on('eventQueueMemberPause', (data) => {
 })
 
 ami.on('eventNewConnectedLine', (data) => {
+  let datos = ('eventNewConnectedLine', data)
+  console.log(datos)
+  /*
   agents.set('agents', agents, (err, data) => {
     if (err) {
       console.log('Error pausing agent on the :' + err)
     }
 
-    /*
     socket.emit('NewConnectedLine', {
       NewConnectedLine: datos['MemberName']
     })
-    */
+
   })
+  */
 })
 
 ami.on('eventHangup', (data) => {
