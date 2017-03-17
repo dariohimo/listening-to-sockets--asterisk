@@ -48,7 +48,10 @@ var iosocket = io.sockets.on('connection', (socket) => {
 })
 
 const ami = asteriskio.ami('192.167.99.224', '5038', 'admin', 'admin')
-ami.on('error', err => { throw err })
+
+ami.on('error', err => {
+  if (err.message === 'Authentication failed.') console.log('Error en la autenticacion del AMI')
+})
 
 /**
 *
@@ -90,16 +93,27 @@ ami.on('eventQueueMemberPause', (data) => {
       console.log('Error pausing agent on the dashboard :' + err)
     }
 
-    iosocket.emit('QueueMemberPause', {
+    iosocket.emit('QueueMemberChange', {
       NumberAnnexed: data['number_annexed'],
-      QueueMemberPause: data
+      QueueMemberChange: data
+    })
+  })
+})
+
+ami.on('eventNewstate', (data) => {
+  agents.ring(data, (err, data) => {
+    if (err) console.log('Error al mostrar ring de salientes :' + err)
+
+    console.log(data)
+    iosocket.emit('QueueMemberChange', {
+      NumberAnnexed: data['number_annexed'],
+      QueueMemberChange: data
     })
   })
 })
 
 ami.on('eventNewConnectedLine', (data) => {
-  let datos = ('eventNewConnectedLine', data)
-  console.log(datos)
+  // let datos = ('eventNewConnectedLine', data)
   /*
   agents.set('agents', agents, (err, data) => {
     if (err) {
