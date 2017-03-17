@@ -143,26 +143,6 @@ ami.on('eventNewConnectedLine', (data) => {
 
 
 /*
-function getAgentStructureRinging (data, event) {
-  let datos = (event, data)
-
-  let agents = {}
-  let annexed = 'SIP/' + datos['CallerIDNum']
-
-  if (datos['ChannelStateDesc'] === 'Ringing') {
-    let phoneNumberInbound = datos['ConnectedLineNum']
-    if (datos['ConnectedLineName'] === 'unknown') {
-      phoneNumberInbound = datos['ConnectedLineNum'] + ' | ' + datos['ConnectedLineName']
-    }
-
-    agents[annexed] = {
-      'name_queue_inbound': datos['Exten'],
-      'phone_number_inbound': phoneNumberInbound
-    }
-  }
-
-  return agents
-}
 
 // Segundo Array - Esto sirve para mostrar los anexos
      // que estan timbrando
@@ -188,32 +168,6 @@ function getAgentStructureRinging (data, event) {
     'penalty_agent': datos['Penalty'],
     'ringinuse_agent': datos['Ringinuse']
 */
-
-//    var list_agents = {}
-//    var number_annexed = datos['Interface']
-//    list_agents[number_annexed] = {
-//      'number_annexed': datos['Interface'],
-//      'name_agent': datos['MemberName'],
-//      'name_event': 'Conectado',
-//      'name_queue_inbound': '',
-//      'phone_number_inbound': '',
-//      'star_call_inbound': '',
-//      'total_calls': '0',
-//      'name_queue': datos['Queue'],
-//      'status_pause': datos['Paused'],
-//      'penalty_agent': datos['Penalty'],
-//      'ringinuse_agent': datos['Ringinuse']
-//    }
-//
-//    json.set('agents', list_agents, (err, result) => {
-//      if (err) {
-//        return res.sendStatus(500).json(err)
-//      }
-//
-//      socket.emit('QueueMemberAdded', {
-//        QueueMemberAdded: list_agents
-//      })
-//    })
 
   // socket.on('new_message', function (data) {
     // console.log(data)
