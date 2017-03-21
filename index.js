@@ -32,7 +32,9 @@ server.listen(port, () => {
 const io = socketio.listen(server)
 io.adapter(socketredis({ host: redisHost, port: redisPort, password: redisPassword }))
 var iosocket = io.sockets.on('connection', (socket) => {
-  socket.on('connect_dashboard', (data) => {
+  // console.log('Connection to client established ' + socket.id)
+
+  socket.on('connect_dashboard', data => {
     agents.shows((err, data) => {
       if (err) console.log('Error al obtener agentes de redis  :' + err)
 
@@ -42,6 +44,12 @@ var iosocket = io.sockets.on('connection', (socket) => {
         })
       }
     })
+  })
+
+  socket.on('join', room => {
+    console.log('Se esta creando la sala del anexo :' + room)
+    socket.room = 'panel_agent:' + room
+    socket.join('panel_agent:' + room)
   })
 })
 
@@ -53,7 +61,7 @@ ami.on('error', err => {
 
 /**
 *
-* [Capturar eventos Queue Member Added que se produce en el servicio de asterisk]
+* [Capturar el evento Queue Member Added que se produce en el servicio de asterisk]
 *
 */
 ami.on('eventQueueMemberAdded', (data) => {
@@ -68,12 +76,13 @@ ami.on('eventQueueMemberAdded', (data) => {
 
 /**
 *
-* [Capturar eventos Queue Member Removed que se produce en el servicio de asterisk]
+* [Capturar el evento Queue Member Removed que se produce en el servicio de asterisk]
 *
 */
 ami.on('eventQueueMemberRemoved', (data) => {
   agents.del(data, (err, data) => {
     if (err) console.log('Error removing agent on the dashboard :' + err)
+    console.log(data)
 
     iosocket.emit('QueueMemberRemoved', {
       NumberAnnexed: data
@@ -83,7 +92,7 @@ ami.on('eventQueueMemberRemoved', (data) => {
 
 /**
 *
-* [Capturar eventos Queue Member Pause que se produce en el servicio de asterisk]
+* [Capturar el evento Queue Member Pause que se produce en el servicio de asterisk]
 *
 */
 ami.on('eventQueueMemberPause', (data) => {
@@ -99,21 +108,52 @@ ami.on('eventQueueMemberPause', (data) => {
 
 /**
 *
-* [Capturar eventos Queue New State que se produce en el servicio de asterisk]
+* [Capturar el evento de la llamada entrante que se produce en el servicio de asterisk]
 *
 */
-ami.on('eventNewstate', (data) => {
-  agents.ring(data, (err, data) => {
+ami.on('eventNewConnectedLine', (data) => {
+  agents.ringInbound(data, (err, data) => {
+    if (err) console.log('Error al mostrar ring de entrante :' + err)
+
+    iosocket.emit('QueueMemberChange', {
+      NumberAnnexed: data['number_annexed'],
+      QueueMemberChange: data
+    })
+
+    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
+      Name_Event: data['name_event'],
+      Event_id: '8'
+    })
+  })
+})
+
+/**
+*
+* [Capturar el evento de la llamada saliente que se produce en el servicio de asterisk]
+*
+*/
+ami.on('eventNewstate', data => {
+  agents.ringOutbound(data, (err, data) => {
     if (err) console.log('Error al mostrar ring de salientes :' + err)
 
     iosocket.emit('QueueMemberChange', {
       NumberAnnexed: data['number_annexed'],
       QueueMemberChange: data
     })
+
+    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
+      Name_Event: data['name_event'],
+      Event_id: '9'
+    })
   })
 })
 
-ami.on('eventHangup', (data) => {
+/**
+*
+* [Capturar el evento de corte de llamada sea entrante y/o saliente que se produce en el servicio de asterisk]
+*
+*/
+ami.on('eventHangup', data => {
   agents.hangup(data, (err, data) => {
     if (err) console.log('Error al cortar (hangup) llamadas salientes :' + err)
 
@@ -121,24 +161,15 @@ ami.on('eventHangup', (data) => {
       NumberAnnexed: data['number_annexed'],
       QueueMemberChange: data
     })
-  })
-})
 
-ami.on('eventNewConnectedLine', (data) => {
-  // let datos = ('eventNewConnectedLine', data)
-  /*
-  agents.set('agents', agents, (err, data) => {
-    if (err) {
-      console.log('Error pausing agent on the :' + err)
-    }
-
-    socket.emit('NewConnectedLine', {
-      NewConnectedLine: datos['MemberName']
+    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
+      Name_Event: 'ACD',
+      Event_id: '1'
     })
-
   })
-  */
 })
+
+
 
 
 
