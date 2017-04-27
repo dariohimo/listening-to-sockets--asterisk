@@ -4,233 +4,187 @@ import express from 'express'
 import socketio from 'socket.io'
 import asteriskio from 'asterisk.io'
 import socketredis from 'socket.io-redis'
+import AmiAction from './lib/amiActions'
 import Agent from './lib/agents'
+import DetailEvents from './lib/detailEvents'
+import CallWaiting from './lib/callWaiting'
+
+const asteriskHost = process.env.asteriskHost
+const asteriskPort = process.env.asteriskPort
+const asteriskUsername = process.env.asteriskUsername
+const asteriskSecret = process.env.asteriskSecret
+
+const eventDetail = new DetailEvents({
+  endpoint: process.env.endpoint,
+  nameapi: process.env.nameapiEventDetail
+})
 
 const agents = new Agent({
-  endpoint: 'http://192.167.99.246:1338',
-  nameapi: '/agent_online'
+  endpoint: process.env.endpoint,
+  nameapi: process.env.nameapiAgents
 })
 
-const redisHost = process.env.REDIS_HOST || '127.0.0.1'
-const redisPort = process.env.REDIS_PORT || '6388'
-const redisPassword = process.env.REDIS_PASSWORD || 'cosapida3slomasfacil'
+const callWaiting = new CallWaiting({
+  endpoint: process.env.endpoint,
+  nameapi: process.env.callWaiting
+})
 
-/**
- * [description: Se instancia el servidor de express]
- *
- * @param app     [Nueva instancia express]
- * @param server  [Creacion Server HTTP]
- * @param port    [Se asigna el puerto de escucha de express]
- *
- */
+const actionAmi = new AmiAction({
+  host: asteriskHost,
+  port: asteriskPort,
+  username: asteriskUsername,
+  secret: asteriskSecret
+})
+
+const redisHost = process.env.redisHost
+const redisPort = process.env.redisPort
+const redisPassword = process.env.redisSecret
+
 const app = express()
 const server = http.createServer(app)
-const port = process.env.PORT || 3000
-server.listen(port, () => {
-  console.log('Rest API para el dashboard se encuentra escuchando el puerto %d', port)
-})
+const port = process.env.expressPort
+server.listen(port, () => console.log('Rest API para el dashboard se encuentra escuchando el puerto %d', port))
 
 const io = socketio.listen(server)
 io.adapter(socketredis({ host: redisHost, port: redisPort, password: redisPassword }))
 var iosocket = io.sockets.on('connection', (socket) => {
-  // console.log('Connection to client established ' + socket.id)
+  console.log('Connection to client established ' + socket.id)
 
-  socket.on('connect_dashboard', data => {
-    agents.shows()
-    .then(value => {
-      value.forEach((item) => {
-        socket.emit('QueueMemberAdded', {
-          QueueMemberAdded: item
-        })
-      })
+  socket.on('listAgentConnect', data => {
+    agents.shows().then(data => {
+      data.forEach(agent => socket.emit('QueueMemberAdded', { QueueMemberAdded: agent }))
     })
-    .catch(err => {
-      console.log('Error al obtener agentes :' + err)
-    })
+    .catch(err => console.log('Error al obtener agentes :' + err))
   })
 
-  socket.on('join', room => {
-    console.log('Se esta creando la sala del anexo :' + room)
-    socket.room = 'panel_agent:' + room
-    socket.join('panel_agent:' + room)
+  socket.on('createRoom', anexo => {
+    socket.room = 'panelAgent:' + anexo
+    socket.join('panelAgent:' + anexo)
+  })
+
+  socket.on('leaveRoom', anexo => {
+    socket.leave('panelAgent:' + anexo)
+  })
+
+  socket.on('createAgent', data => {
+    agents.createAgent(data).then(data => iosocket.emit('QueueMemberAdded', { QueueMemberAdded: data }))
+    .catch(err => { console.log('Error adding agent on the dashboard :' + err) })
   })
 })
 
-const ami = asteriskio.ami('192.167.99.224', '5038', 'admin', 'admin')
+const ami = asteriskio.ami(asteriskHost, asteriskPort, asteriskUsername, asteriskSecret)
 ami.on('error', err => {
   if (err.message === 'Authentication failed.') console.log('Error en la autenticacion del AMI')
 })
 
 /**
-*
 * [Capturar el evento Queue Member Added que se produce en el servicio de asterisk]
-*
 */
 ami.on('eventQueueMemberAdded', data => {
-  agents.add(data)
-  .then(value => {
-    iosocket.emit('QueueMemberAdded', {
-      QueueMemberAdded: value
-    })
-  })
-  .catch(err => {
-    console.log('Error adding agent on the dashboard :' + err)
-  })
+  agents.add(data).then(data => iosocket.emit('QueueMemberAdded', { QueueMemberAdded: data }))
+  .catch(err => console.log('Error adding agent on the dashboard :' + err))
 })
 
 /**
-*
 * [Capturar el evento Queue Member Removed que se produce en el servicio de asterisk]
-*
 */
 ami.on('eventQueueMemberRemoved', data => {
-  agents.del(data)
-  .then(value => {
-    iosocket.emit('QueueMemberRemoved', {
-      NumberAnnexed: value
-    })
-  })
-  .catch(err => {
-    console.log('Error removing agent on the dashboard :' + err)
-  })
+  agents.del(data).then(data => iosocket.emit('QueueMemberRemoved', { NumberAnnexed: data }))
+  .catch(err => { console.log('Error removing agent on the dashboard :' + err) })
 })
 
 /**
-*
 * [Capturar el evento Queue Member Pause que se produce en el servicio de asterisk]
-*
 */
 ami.on('eventQueueMemberPause', data => {
-  agents.pause(data, (err, data) => {
-    if (err) console.log('Error pausing agent on the dashboard :' + err)
-
-    iosocket.emit('QueueMemberChange', {
-      NumberAnnexed: data['number_annexed'],
-      QueueMemberChange: data
-    })
-  })
+  agents.pause(data).then(data => iosocket.emit('QueueMemberChange', { QueueMemberChange: data }))
+  .catch(err => { console.log('Error pausing agent on the dashboard :' + err) })
 })
 
 /**
-*
 * [Capturar el evento de timbrado de la llamada entrante que se produce en el servicio de asterisk]
-*
 */
 ami.on('eventNewConnectedLine', data => {
-  agents.ringInbound(data, (err, data) => {
-    if (err) console.log('Error al mostrar ring de entrante :' + err)
-
-    iosocket.emit('QueueMemberChange', {
-      NumberAnnexed: data['number_annexed'],
-      QueueMemberChange: data
-    })
-
-    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
-      Name_Event: data['name_event'],
-      Event_id: '8'
-    })
-  })
+  agents.ringInbound(data).then(data => sendSockets(data, false))
+  .catch(err => { console.log('Error al mostrar ring de entrante :' + err) })
 })
 
 /**
-*
 * [Capturar el evento Answer de la llamada entrante que se produce en el servicio de asterisk]
-*
 */
 ami.on('eventAgentConnect', data => {
-  agents.answerInbound(data, (err, data) => {
-    if (err) console.log('Error al capturar (answer) de la llamada entrante :' + err)
-
-    iosocket.emit('QueueMemberChange', {
-      NumberAnnexed: data['number_annexed'],
-      QueueMemberChange: data
-    })
-
-    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
-      Name_Event: 'Inbound',
-      Event_id: '8'
-    })
-  })
+  agents.answerInbound(data).then(data => sendSockets(data, true))
+  .catch(err => { console.log('Error al capturar (answer) de la llamada entrante :' + err) })
 })
 
 /**
-*
-* [Capturar el evento de la llamada saliente que se produce en el servicio de asterisk]
-*
+* [Capturar el evento de timbrado de la llamada saliente que se produce en el servicio de asterisk]
 */
 ami.on('eventNewstate', data => {
-  agents.ringOutbound(data, (err, data) => {
-    if (err) console.log('Error al mostrar ring de salientes :' + err)
-
-    iosocket.emit('QueueMemberChange', {
-      NumberAnnexed: data['number_annexed'],
-      QueueMemberChange: data
-    })
-
-    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
-      Name_Event: data['name_event'],
-      Event_id: '9'
-    })
-  })
+  agents.ringOutbound(data).then(data => sendSockets(data, true))
+  .catch(err => { console.log('Error al mostrar ring de salientes :' + err) })
 })
 
 /**
-*
 * [Capturar el evento de corte de llamada sea entrante y/o saliente que se produce en el servicio de asterisk]
-*
 */
 ami.on('eventHangup', data => {
-  console.log(data)
-
-  agents.hangup(data, (err, data) => {
-    if (err) console.log('Error al cortar (hangup) llamadas salientes y/o entrantes :' + err)
-
-    iosocket.emit('QueueMemberChange', {
-      NumberAnnexed: data['number_annexed'],
-      QueueMemberChange: data
-    })
-
-    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
-      Name_Event: 'ACD',
-      Event_id: '1'
-    })
-  })
+  agents.hangup(data).then(data => sendSockets(data, true))
+  .catch(err => { console.log('Error al cortar (hangup) llamadas salientes y/o entrantes :' + err) })
 })
 
 /**
-*
 * [Capturar el evento cuando se completa una transferencia ciega que se produce en el servicio de asterisk]
-*
 */
-ami.on('eventBlindTransfer', data => {
-  agents.transferUnattended(data, (err, data) => {
-    if (err) console.log('Error al cortar (hangup) llamadas salientes y/o entrantes :' + err)
-
-    iosocket.emit('QueueMemberChange', {
-      NumberAnnexed: data['number_annexed'],
-      QueueMemberChange: data
-    })
-
-    iosocket.in('panel_agent:' + data['number_annexed']).emit('status_agent', {
-      Name_Event: 'ACD',
-      Event_id: '1'
-    })
-  })
-})
-
-ami.on('eventAny', data => {
-  // console.log(data)
-})
+ami.on('eventBlindTransfer', data => sendSockets(agents.transferUnattended(data), true))
 
 ami.on('eventHold', data => {
-  // console.log(data)
+  agents.hold(data).then(data => sendSockets(data, true))
+  .catch(err => { console.log('Error al mostrar Hold :' + err) })
 })
 
 ami.on('eventUnhold', data => {
-  // console.log(data)
+  agents.unhold(data).then(data => sendSockets(data, true))
+  .catch(err => { console.log('Error al mostrar UnHold :' + err) })
+})
+
+ami.on('eventQueueCallerJoin', data => {
+  callWaiting.create(data).then(data => sendCallWaiting(data, 'AddCallWaiting'))
+  .catch(err => { console.log('Error al insertar llamadas encoladas :' + err) })
+})
+
+ami.on('eventQueueCallerLeave', data => {
+  callWaiting.delete(data).then(data => sendCallWaiting(data, 'RemoveCallWaiting'))
+  .catch(err => { console.log('Error al eliminar llamadas encoladas :' + err) })
 })
 
 ami.on('eventAttendedTransfer', data => {
+  // console.log(data)
+})
+
+function sendCallWaiting (data, nameEventEmit) {
+  if (data) {
+    console.log(data)
+    iosocket.emit(nameEventEmit, { CallWaiting: data })
+  }
+}
+
+function sendSockets (data, isPause) {
+  if (data) {
+    // console.log(isPause)
+    // console.log(data)
+    if (isPause) actionAmi.pauseQueue(data)
+    else eventDetail.insertEvent(data)
+
+    iosocket.emit('QueueMemberChange', { QueueMemberChange: data })
+    iosocket.in('panelAgent:' + data.number_annexed).emit('statusAgent', {
+      NameEvent: data.name_event,
+      EventId: data.event_id
+    })
+  }
+}
+
+ami.on('eventAny', data => {
   // console.log(data)
 })
 

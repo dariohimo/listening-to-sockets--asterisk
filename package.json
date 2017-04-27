@@ -16,12 +16,16 @@
     "babel-preset-stage-2": "^6.22.0"
   },
   "dependencies": {
+    "asterisk-ami-client": "^1.0.5",
     "asterisk.io": "^0.1.1",
     "async": "^2.2.0",
     "await": "^0.2.6",
     "chokidar": "^1.6.1",
     "client-request": "^1.2.0",
+    "co": "^4.6.0",
+    "dateformat": "^2.0.0",
     "express": "^4.14.1",
+    "ip": "^1.1.5",
     "mysql": "github:mysqljs/mysql",
     "querystring": "^0.2.0",
     "request": "^2.81.0",
