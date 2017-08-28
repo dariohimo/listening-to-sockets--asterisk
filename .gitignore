@@ -60,3 +60,6 @@ typings/
 
 # archivos de pruebas de api sails
 api/
+
+# phpstorm
+.idea/
