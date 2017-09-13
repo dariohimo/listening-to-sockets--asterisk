@@ -1,2 +1,1 @@
-import dotenv from 'dotenv'
-console.log(dotenv.config())
+require('./lib/server.js')
