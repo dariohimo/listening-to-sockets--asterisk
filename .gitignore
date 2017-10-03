@@ -21,3 +21,6 @@ config/.env_production
 
 # phpstorm
 .idea/
+
+# eslintrc
+.eslintrc
