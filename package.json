@@ -7,11 +7,10 @@
   "author": "Alan Cornejo <alancornejo@icloud.com>",
   "license": "MIT",
   "dependencies": {
-    "asterisk-ami-client": "^1.0.5",
+    "asterisk-ami-client": "^1.1.5",
     "asterisk.io": "^0.1.1",
     "dateformat": "^2.0.0",
-    "dotenv": "^4.0.0",
-    "express": "^4.15.4",
+    "express": "^4.16.3",
     "ip": "^1.1.5",
     "moment": "^2.19.1",
     "object-length": "^0.2.0",
